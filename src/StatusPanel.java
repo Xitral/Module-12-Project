@@ -50,7 +50,11 @@ public class StatusPanel {
     public void adjustStatus(String status, int value) {
         JProgressBar progressBar = this.statusBars.get(status);
         if (progressBar != null) {
-            progressBar.setValue(value);
+            if ("Thirst".equals(status) || "Hunger".equals(status)) {
+                progressBar.setValue(100 - value); // Flip the value for thirst and hunger
+            } else {
+                progressBar.setValue(value);
+            }
         }
     }
 

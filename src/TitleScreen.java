@@ -7,10 +7,14 @@ import java.awt.image.BufferedImage;
 public class TitleScreen extends JFrame {
     private final String[] colors = {"White", "Gold", "Brown", "Black"};
     private Pet gamePet;
+    private Sound music;
 
     public TitleScreen() {
         setupFrame();
         addPetButtons();
+
+        this.music = new Sound("resources/sounds/underscore.wav");
+        this.music.playContinuously();
     }
 
     private void setupFrame() {
@@ -50,7 +54,7 @@ public class TitleScreen extends JFrame {
         petButton.setVerticalTextPosition(JButton.CENTER);
         petButton.setFocusPainted(false);
         petButton.setBackground(Color.white);
-        petButton.addActionListener(e -> createColorButtons(pet));
+        petButton.addActionListener(e -> onPetSelect(pet));
         petButton.setBorder(BorderFactory.createLineBorder(Color.white, 6));
         return petButton;
     }
@@ -80,6 +84,13 @@ public class TitleScreen extends JFrame {
         });
     }
 
+    private void onPetSelect(Pet pet) {
+        this.gamePet = pet.getClass().getSimpleName().equals("Dog") ? new Dog("","") : new Cat("","");
+        String soundFile = pet.getClass().getSimpleName().equals("Dog") ? "resources/sounds/bark1.wav" : "resources/sounds/meow2.wav";
+        new Sound(soundFile).play();
+        createColorButtons(pet);
+    }
+
     private ImageIcon getPetIcon(Pet pet, int x, int y) {
         return new ImageIcon(
                 pet.getSpriteSheet().getSprite(
@@ -93,7 +104,6 @@ public class TitleScreen extends JFrame {
 
     private void createColorButtons(Pet pet) {
         getContentPane().removeAll();
-        this.gamePet = pet.getClass().getSimpleName().equals("Dog") ? new Dog("","") : new Cat("","");
         for(int i = 0; i < colors.length; i++) {
             addColorButton(pet, i);
         }
@@ -144,9 +154,18 @@ public class TitleScreen extends JFrame {
         return new Color(pixel, true);
     }
 
+    public Pet getPet() {
+        return gamePet;
+    }
+
+    public Sound getMusic() {
+        return music;
+    }
+
     private void startGame(int i) {
         this.gamePet.setColor(colors[i]);
-        Game game = new Game(this.gamePet);
+        Game game = new Game(this);
+        dispose();
     }
 
     public static void main(String[] args) {

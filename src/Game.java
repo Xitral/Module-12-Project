@@ -1,53 +1,68 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.util.Map;
+import java.util.*;
+
+import static java.lang.System.exit;
 
 public class Game extends JFrame {
+    private static final int SCREEN_WIDTH = 800;
+    private static final int SCREEN_HEIGHT = 600;
+    private static final int PLAYER_SPEED = 3;
+    private static final int TILE_SIZE = 32;
+    private static final int FRAME_DELAY = 9;
+
     // Player variables
-    private final int playerSpeed = 3;
     private final boolean[] keys = new boolean[4];
-    private PlayerState playerState = PlayerState.IDLE;
     private int[] playerPos = {300, 300};
     private int direction = 0;
 
     // Frame counter variables
     private int frameCounter = 0;
-    private final int frameDelay = 9;
     private int currentFrame = 0;
 
-    // Tile variables
-    private final int tileSize = 32;
-
     // Game objects
-    private SpriteSheet tileMap;
+    private ArrayList<GameObject> wallList;
+    private SpriteSheet floorMap;
+    private SpriteSheet wallMap;
     private GamePanel gamePanel;
     private StatusPanel statusPanel;
     private SpriteSheet emotes;
+    private Sound music;
     private Pet pet;
+    private ArrayList<GameObject> furnitureList;
+    private boolean isPaused;
+    private boolean mouseHeld = false;
 
-    public Game(Pet pet) {
-        this.pet = pet;
 
-        TitleScreen d = new TitleScreen();
+    public Game(TitleScreen titleScreen) {
+        this.pet = titleScreen.getPet();
+        this.music = titleScreen.getMusic();
+        this.furnitureList = new ArrayList<>();
+        this.wallList = new ArrayList<>();
+        this.isPaused = false;
+
         setupWindow();
         setupTileMap();
+        setupEnvironment();
         setupGamePanel();
         setupPet();
         setupStatusPanel();
         setupKeyListener();
 
-        music = new Music("music.wav");
-        music.playContinuously();
-
         startGameLoop();
 
-        emotes = new SpriteSheet("/resources/emotes.png", tileSize);
+        emotes = new SpriteSheet("/resources/images/emotes.png", TILE_SIZE);
     }
 
-    static Music music;
+    public Pet getPet() {
+        return pet;
+    }
+
+    public Sound getMusic() {
+        return music;
+    }
 
     public static void main(String[] args) {
         System.out.println("Hello, World!");
@@ -55,7 +70,7 @@ public class Game extends JFrame {
 
     private void setupWindow() {
         setTitle("Untitled Pet Game - Survive!");
-        setSize(800, 600);
+        setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setResizable(false);
@@ -64,7 +79,39 @@ public class Game extends JFrame {
 
     private void setupGamePanel() {
         gamePanel = new GamePanel();
+        gamePanel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    mouseHeld = true;
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    mouseHeld = false;
+                }
+            }
+        });
+        gamePanel.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (mouseHeld && isMouseOverPet(e.getX(), e.getY())) {
+                    pet.clean();
+                }
+            }
+        });
         add(gamePanel);
+    }
+
+    private boolean isMouseOverPet(int mouseX, int mouseY) {
+        int petX = playerPos[0];
+        int petY = playerPos[1];
+        int petWidth = TILE_SIZE * 2;
+        int petHeight = TILE_SIZE * 2;
+
+        return mouseX >= petX && mouseX <= petX + petWidth && mouseY >= petY && mouseY <= petY + petHeight;
     }
 
     private void setupStatusPanel() {
@@ -75,7 +122,41 @@ public class Game extends JFrame {
     }
 
     private void setupTileMap() {
-        tileMap = new SpriteSheet("/resources/floors.png", tileSize);
+        floorMap = new SpriteSheet("/resources/images/floors.png", TILE_SIZE);
+        wallMap = new SpriteSheet("/resources/images/walls.png", TILE_SIZE);
+    }
+
+
+    private void setupEnvironment() {
+        System.out.println("Setting up environment:");
+
+        SpriteSheet itemMap = new SpriteSheet("/resources/images/items.png", 32);
+
+        this.addFurniture(
+                new WaterBowl(
+                        new Point(400, 450),
+                itemMap.getTile(3,15,32),
+                true, "Water Bowl", "Water for your pet.")
+        );
+
+        this.addFurniture(
+                new FoodPlate(
+                        new Point(450, 450),
+                        itemMap.getTile(14,15,32),
+                        true, "Food Plate", "Food for your pet.")
+        );
+
+        BufferedImage wallSprite;
+        for (int i = 0; i < SCREEN_WIDTH; i += TILE_SIZE) {
+
+            wallSprite = wallMap.getTile(2+8, 10, 32);
+            wallList.add(new Wall(new Point(i, 0), wallSprite)); // Top wall
+        }
+
+    }
+
+    public void addFurniture(Furniture furniture) {
+        furnitureList.add(furniture);
     }
 
     private void setupPet() {
@@ -95,6 +176,8 @@ public class Game extends JFrame {
                     case KeyEvent.VK_S -> keys[1] = true;
                     case KeyEvent.VK_A -> keys[2] = true;
                     case KeyEvent.VK_D -> keys[3] = true;
+                    case KeyEvent.VK_SPACE -> pet.sleep();
+                    case KeyEvent.VK_F -> pet.dance();
                 }
             }
 
@@ -105,9 +188,28 @@ public class Game extends JFrame {
                     case KeyEvent.VK_S -> keys[1] = false;
                     case KeyEvent.VK_A -> keys[2] = false;
                     case KeyEvent.VK_D -> keys[3] = false;
+                    case KeyEvent.VK_SPACE, KeyEvent.VK_F -> pet.wake();
+                    case KeyEvent.VK_ESCAPE -> isPaused = !isPaused;
                 }
             }
         });
+    }
+
+    private void renderGameObjects(Graphics2D g2d) {
+        for (GameObject furniture : furnitureList) {
+            if (furniture instanceof Furniture) {
+                BufferedImage sprite = furniture.getSprite();
+                int width = sprite.getWidth() * 2;
+                int height = sprite.getHeight() * 2;
+                g2d.drawImage(sprite, furniture.getPosition().x, furniture.getPosition().y, width, height, null);
+            } else {
+                g2d.drawImage(furniture.getSprite(), furniture.getPosition().x, furniture.getPosition().y, null);
+            }
+        }
+
+        for (GameObject wall : wallList) {
+            g2d.drawImage(wall.getSprite(), wall.getPosition().x, wall.getPosition().y, null);
+        }
     }
 
     private void startGameLoop() {
@@ -121,7 +223,12 @@ public class Game extends JFrame {
     private final long[] lastUpdate = {0, 0};
 
     private void playFrame() {
+        if (isPaused) {
+            return;
+        }
+
         updateFrameCounter();
+
 
         statusPanel.updateStatus(pet);
 
@@ -129,14 +236,14 @@ public class Game extends JFrame {
             updatePlayerPosition();
 
             // Update the pet every minute
-            if (System.currentTimeMillis() - lastUpdate[0] >= 200) {
+            if (System.currentTimeMillis() - lastUpdate[0] >= 1000) {
                 pet.update();
                 System.out.println(pet.toString());
                 lastUpdate[0] = System.currentTimeMillis();
             }
 
             // Update the age every 5 minutes
-            if (System.currentTimeMillis() - lastUpdate[1] >= 300000) {
+            if (System.currentTimeMillis() - lastUpdate[1] >= 30000) {
                 pet.age();
                 System.out.println(pet.toString());
                 lastUpdate[1] = System.currentTimeMillis();
@@ -144,67 +251,92 @@ public class Game extends JFrame {
 
             sleep();
         } else {
-            playerState = PlayerState.DEAD;
+            gameOver("You should have taken better care of your pet!");
         }
 
         gamePanel.repaint();
+    }
+
+    private void gameOver(String msg) {
+        pet.setState(PetState.DEAD);
+        JOptionPane.showMessageDialog(this, msg);
+        dispose();
+        exit(0);
     }
 
     private void updatePlayerPosition() {
         int potentialPlayerX = playerPos[0];
         int potentialPlayerY = playerPos[1];
 
-        if (keys[0]) {
-            potentialPlayerY -= playerSpeed;
-            direction = 1;
-            playerState = PlayerState.WALKING;
-        } else if (keys[1]) {
-            potentialPlayerY += playerSpeed;
-            direction = 2;
-            playerState = PlayerState.WALKING;
-        } else if (keys[2]) {
-            potentialPlayerX -= playerSpeed;
-            direction = 3;
-            playerState = PlayerState.WALKING;
-        } else if (keys[3]) {
-            potentialPlayerX += playerSpeed;
-            direction = 0;
-            playerState = PlayerState.WALKING;
-        } else {
-            playerState = PlayerState.IDLE;
+        // Pet can only move if it's NOT sleeping
+        if (!pet.isSleeping() && !pet.isDancing()) {
+            if (keys[0]) {
+                potentialPlayerY -= PLAYER_SPEED;
+                direction = 1;
+                pet.setState(PetState.WALKING);
+            } else if (keys[1]) {
+                potentialPlayerY += PLAYER_SPEED;
+                direction = 2;
+                pet.setState(PetState.WALKING);
+            } else if (keys[2]) {
+                potentialPlayerX -= PLAYER_SPEED;
+                direction = 3;
+                pet.setState(PetState.WALKING);
+            } else if (keys[3]) {
+                potentialPlayerX += PLAYER_SPEED;
+                direction = 0;
+                pet.setState(PetState.WALKING);
+            } else {
+                pet.setState(PetState.IDLE);
+            }
         }
 
-        if (!checkCollision(potentialPlayerX, potentialPlayerY)) {
-            playerPos[0] = potentialPlayerX;
-            playerPos[1] = potentialPlayerY;
+        // Check if the new position is within the screen boundaries
+        if (potentialPlayerX >= 0 && potentialPlayerX <= SCREEN_WIDTH - TILE_SIZE - 40 &&
+                potentialPlayerY >= 0 && potentialPlayerY <= SCREEN_HEIGHT - TILE_SIZE - 110) {
+            // Check if the new position collides with any furniture
+            if (!checkCollision(potentialPlayerX, potentialPlayerY)) {
+                playerPos[0] = potentialPlayerX;
+                playerPos[1] = potentialPlayerY;
+            }
         }
     }
 
     private boolean checkCollision(int potentialPlayerX, int potentialPlayerY) {
-        Rectangle playerRect = new Rectangle(potentialPlayerX, potentialPlayerY, tileSize * 2, tileSize * 2);
-        Rectangle objectRect = new Rectangle(200, 200, tileSize * 2, tileSize * 2);
-        return playerRect.intersects(objectRect);
+        Rectangle playerRect = new Rectangle(potentialPlayerX, potentialPlayerY, 32, 32);
+
+        for (GameObject furniture : furnitureList) {
+            Rectangle objectRect = new Rectangle(furniture.getPosition().x, furniture.getPosition().y, furniture.getSprite().getWidth(), furniture.getSprite().getHeight());
+            if (playerRect.intersects(objectRect)) {
+                if (furniture.isInteractable()) {
+                    furniture.interact(this);
+                }
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private int animationDirection = 1; // 1 for forward, -1 for reverse
 
     private void updateFrameCounter() {
         frameCounter++;
-        if (frameCounter >= frameDelay) {
+        if (frameCounter >= FRAME_DELAY) {
             frameCounter = 0;
-            if (playerState == PlayerState.IDLE) {
+
+            if (pet.isIdle()) {
                 if ((currentFrame == 2 && animationDirection == 1) || (currentFrame == 0 && animationDirection == -1)) {
                     animationDirection *= -1; // Reverse the direction
                 }
                 currentFrame += animationDirection;
-            } else if (isWalking()) {
+            } else if (pet.isDancing()) {
+                currentFrame = (currentFrame + 1) % 5; // Assuming you have 3 frames for walk animations
+            } else if (pet.isWalking()) {
                 currentFrame = (currentFrame + 1) % 3; // Assuming you have 3 frames for walk animations
             }
         }
-    }
-
-    private boolean isWalking() {
-        return keys[0] || keys[1] || keys[2] || keys[3];
     }
 
     private void sleep() {
@@ -225,22 +357,22 @@ public class Game extends JFrame {
         private BufferedImage createBuffer() {
             BufferedImage buffer = new BufferedImage(800, 600, BufferedImage.TYPE_INT_ARGB);
             Graphics2D bufferGraphics = buffer.createGraphics();
-            for (int i = 0; i < 800; i += tileSize) {
-                for (int j = 0; j < 600; j += tileSize) {
+            for (int i = 0; i < 800; i += TILE_SIZE) {
+                for (int j = 0; j < 600; j += TILE_SIZE) {
                     BufferedImage tile = chooseTile(i, j);
-                    bufferGraphics.drawImage(tile, i, j, tileSize, tileSize * 2, null);
+                    bufferGraphics.drawImage(tile, i, j, TILE_SIZE, TILE_SIZE * 2, null);
                 }
             }
             return buffer;
         }
 
         private BufferedImage chooseTile(int i, int j) {
-            int tileX = i / tileSize;
-            int tileY = j / tileSize;
-            if (tileX == 0 || tileY == 0 || tileX == 800 / tileSize - 1 || tileY == 600 / tileSize - 1) {
-                return tileMap.getTile(3, 38, 32);
+            int tileX = i / TILE_SIZE;
+            int tileY = j / TILE_SIZE;
+            if (tileX == 0 || tileY == 0 || tileX == 800 / TILE_SIZE - 1 || tileY == 600 / TILE_SIZE - 1) {
+                return floorMap.getTile(3, 38, 32);
             } else {
-                return tileMap.getTile(1, 38, 32);
+                return floorMap.getTile(1, 38, 32);
             }
         }
 
@@ -249,8 +381,10 @@ public class Game extends JFrame {
         public int[] getEmotePosition() {
             int hoverEffect = (int) (Math.sin(hoverEffectCounter / 20.00) * 3);
             hoverEffectCounter++;
-            if (playerState == PlayerState.IDLE) {
+            if (pet.isIdle()) {
                 return new int[]{playerPos[0] - 10, playerPos[1] + 10 + hoverEffect};
+            } else if(pet.isSleeping()) {
+                return new int[]{playerPos[0] - 20, playerPos[1] - 10 + hoverEffect};
             } else {
                 return switch (direction) {
                     case 0 -> new int[]{playerPos[0], playerPos[1] - 10 + hoverEffect};
@@ -272,12 +406,6 @@ public class Game extends JFrame {
             g2d.fillRect(0, 0, getWidth(), getHeight());
             g2d.drawImage(buffer, 0, 0, null);
 
-            Emote emote = pet.getEmote();
-            if (emote != null) {
-                int[] emotePosition = getEmotePosition();
-                g2d.drawImage(emote.getImage(), emotePosition[0], emotePosition[1], 32, 32, null);
-            }
-
 
             Map<String, Integer> colorMap = Map.of(
                     "White", 0,
@@ -288,16 +416,28 @@ public class Game extends JFrame {
 
             int colorIndex = colorMap.getOrDefault(pet.getColor(), 0) * 4;
 
-            System.out.println(currentFrame);
+            // Fixes bug where % 5 wouldn't be updated to % 3 in time for next frame
+            if (!pet.isDancing()) {
+                currentFrame = currentFrame % 3;
+            }
 
             BufferedImage playerSprite;
-            switch (playerState) {
+            System.out.println(pet.getState());
+            switch (pet.getState()) {
                 case WALKING -> playerSprite = pet.getSprite(direction, currentFrame + colorIndex);
                 case IDLE -> playerSprite = pet.getSprite(4, currentFrame + colorIndex);
-                case DEAD -> playerSprite = pet.getSprite(3, 3 + colorIndex);
-                default -> playerSprite = pet.getSprite(direction, 0 + colorIndex);
+                case SLEEPING, DEAD -> playerSprite = pet.getSprite(3, 3 + colorIndex);
+                case DANCING -> playerSprite = pet.getSprite(currentFrame, colorIndex);
+                default -> playerSprite = pet.getSprite(direction, colorIndex);
             }
-            g2d.drawImage(playerSprite, playerPos[0], playerPos[1], tileSize * 2, tileSize * 2, null);
+            renderGameObjects(g2d);
+            g2d.drawImage(playerSprite, playerPos[0], playerPos[1], TILE_SIZE * 2, TILE_SIZE * 2, null);
+
+            Emote emote = pet.getEmote();
+            if (emote != null) {
+                int[] emotePosition = getEmotePosition();
+                g2d.drawImage(emote.getImage(), emotePosition[0], emotePosition[1], 32, 32, null);
+            }
         }
     }
 }

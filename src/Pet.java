@@ -3,7 +3,7 @@ import java.awt.image.BufferedImage;
 public abstract class Pet {
     private SpriteSheet spriteSheet;
     private BufferedImage[][] sprites;
-    private final SpriteSheet emotes = new SpriteSheet("/resources/emotes.png", 16);
+    private final SpriteSheet emotes = new SpriteSheet("/resources/images/emotes.png", 16);
     private String name;
     private String color;
     private int age;
@@ -13,6 +13,7 @@ public abstract class Pet {
     private int thirst;
     private int energy;
     private int cleanliness;
+    private PetState state;
 
 
     // Full Pet constructor
@@ -28,6 +29,7 @@ public abstract class Pet {
         this.thirst = 0;
         this.energy = 100;
         this.cleanliness = 100;
+        this.state = PetState.IDLE;
     }
 
     // Pet (w/ color) constructor
@@ -35,12 +37,14 @@ public abstract class Pet {
         this.spriteSheet = spriteSheet;
         this.sprites = new BufferedImage[5][16];
         this.color = color;
+        this.state = PetState.IDLE;
     }
 
     // Anonymous constructor
     public Pet(SpriteSheet spriteSheet) {
         this.spriteSheet = spriteSheet;
         this.sprites = new BufferedImage[5][16];
+        this.state = PetState.IDLE;
     }
 
     public void setColor(String color) {
@@ -76,11 +80,19 @@ public abstract class Pet {
     }
 
     public void sleep() {
-        energy = 100;
+        this.state = PetState.SLEEPING;
+    }
+
+    public void wake() {
+        this.state = PetState.IDLE;
+    }
+
+    public void dance() {
+        this.state = PetState.DANCING;
     }
 
     public void clean() {
-        cleanliness = 100;
+        adjustStat("cleanliness", 1);
     }
 
     public void age() {
@@ -93,11 +105,26 @@ public abstract class Pet {
 
     public void update() {
         adjustStat("hunger", 1);
-        adjustStat("thirst", 1);
-        adjustStat("energy", -1);
+        adjustStat("thirst", 2);
         adjustStat("cleanliness", -1);
+
+        if (isSleeping()) {
+            adjustStat("energy", 5);
+        } else {
+            adjustStat("energy", -1);
+        }
+
+        if (isDancing()) {
+            adjustStat("happiness", 5);
+            adjustStat("energy", -1);
+        } else {
+            adjustStat("happiness", -1);
+        }
+
         if (hunger >= 100 || thirst >= 100 || energy <= 0 || cleanliness <= 0) {
             adjustStat("health", -5);
+        } else {
+            adjustStat("health", 1);
         }
     }
 
@@ -149,6 +176,14 @@ public abstract class Pet {
         return cleanliness;
     }
 
+    public PetState getState() {
+        return state;
+    }
+
+    public void setState(PetState state) {
+        this.state = state;
+    }
+
     public boolean isHappy() {
         return happiness >= 50;
     }
@@ -165,21 +200,53 @@ public abstract class Pet {
         return health <= 50;
     }
 
+    public boolean isDirty() {
+        return cleanliness <= 50;
+    }
+
     public boolean isDead() {
         return health <= 0;
+    }
+
+    public boolean isTired() {
+        return energy <= 50;
+    }
+
+    public boolean isSleeping() {
+        return state == PetState.SLEEPING;
+    }
+
+    public boolean isDancing() {
+        return state == PetState.DANCING;
+    }
+
+    public boolean isIdle() {
+        return state == PetState.IDLE;
+    }
+
+    public boolean isWalking() {
+        return state == PetState.WALKING;
     }
 
     public Emote getEmote() {
         if (isDead()) {
             return null; // Dead pets don't have emotes :(
+        } else if (isSick()) {
+            return new Emote(emotes.getTile(2, 5, 16), "sick");
         } else if (!isHappy()) {
-            return new Emote(emotes.getTile(3,1, 16), "happy");
+            return new Emote(emotes.getTile(3,1, 16), "sad");
+        } else if (isThirsty()) {
+            return new Emote(emotes.getTile(4, 1, 16), "thirsty");
         } else if (isHungry()) {
             return new Emote(emotes.getTile(4,6, 16), "hungry");
-        } else if (isThirsty()) {
-            return new Emote(emotes.getTile(1, 4, 16), "thirsty");
-        } else if (isSick()) {
-            return new Emote(emotes.getTile(2, 4, 16), "sick");
+        } else if (isDirty()) {
+            return new Emote(emotes.getTile(5,1, 16), "dirty");
+        } else if (isTired()) {
+            return new Emote(emotes.getTile(1,5, 16), "tired");
+        } else if (isSleeping()) {
+            return new Emote(emotes.getTile(1,4, 16), "sleeping");
+        } else if (isDancing()) {
+            return new Emote(emotes.getTile(2,1, 16), "dancing");
         } else {
             return null; // No emote
         }
