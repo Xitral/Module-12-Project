@@ -2,6 +2,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FileWriter;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -32,6 +34,8 @@ public class Game extends JFrame {
     private Sound music;
     private Pet pet;
     private ArrayList<GameObject> furnitureList;
+    private ArrayList<Bubble> bubbles = new ArrayList<>();
+
     private boolean isPaused;
     private boolean mouseHeld = false;
 
@@ -78,7 +82,14 @@ public class Game extends JFrame {
     }
 
     private void setupGamePanel() {
-        gamePanel = new GamePanel();
+        this.gamePanel = new GamePanel();
+
+        JLabel label = new JLabel("[ESC]: Pause      [M]: Mute      [F]: Dance      [SPACE]: Sleep");
+        label.setFont(new Font("Verdana", Font.BOLD, 14));
+        label.setForeground(Color.WHITE);
+        label.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
+        gamePanel.add(label);
+
         gamePanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -95,10 +106,12 @@ public class Game extends JFrame {
             }
         });
         gamePanel.addMouseMotionListener(new MouseMotionAdapter() {
+
             @Override
             public void mouseDragged(MouseEvent e) {
                 if (mouseHeld && isMouseOverPet(e.getX(), e.getY())) {
                     pet.clean();
+                    bubbles.add(new Bubble(e.getPoint(), (int)(Math.random() * 2 + 5), 10));
                 }
             }
         });
@@ -126,10 +139,7 @@ public class Game extends JFrame {
         wallMap = new SpriteSheet("/resources/images/walls.png", TILE_SIZE);
     }
 
-
     private void setupEnvironment() {
-        System.out.println("Setting up environment:");
-
         SpriteSheet itemMap = new SpriteSheet("/resources/images/items.png", 32);
 
         this.addFurniture(
@@ -190,6 +200,7 @@ public class Game extends JFrame {
                     case KeyEvent.VK_D -> keys[3] = false;
                     case KeyEvent.VK_SPACE, KeyEvent.VK_F -> pet.wake();
                     case KeyEvent.VK_ESCAPE -> isPaused = !isPaused;
+                    case KeyEvent.VK_M -> music.stop();
                 }
             }
         });
@@ -229,37 +240,44 @@ public class Game extends JFrame {
 
         updateFrameCounter();
 
-
         statusPanel.updateStatus(pet);
 
         if (pet.getHealth() > 0) {
             updatePlayerPosition();
 
             // Update the pet every minute
-            if (System.currentTimeMillis() - lastUpdate[0] >= 1000) {
+            if (System.currentTimeMillis() - lastUpdate[0] >= 500) {
                 pet.update();
-                System.out.println(pet.toString());
                 lastUpdate[0] = System.currentTimeMillis();
             }
 
-            // Update the age every 5 minutes
-            if (System.currentTimeMillis() - lastUpdate[1] >= 30000) {
+            // Update the age every minute
+            if (System.currentTimeMillis() - lastUpdate[1] >= 60000) {
                 pet.age();
-                System.out.println(pet.toString());
                 lastUpdate[1] = System.currentTimeMillis();
             }
 
             sleep();
         } else {
-            gameOver("You should have taken better care of your pet!");
+            gameOver();
         }
 
         gamePanel.repaint();
     }
 
-    private void gameOver(String msg) {
+    private void gameOver() {
         pet.setState(PetState.DEAD);
-        JOptionPane.showMessageDialog(this, msg);
+
+        try {
+            FileWriter writer = new FileWriter(new File("highscores.txt"), true);
+            writer.write(pet.getName() + ": " + pet.getAge() + "minutes\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        JOptionPane.showMessageDialog(this, pet.getName() + " survived for " + pet.getAge() + " minute(s). Game over!");
+
         dispose();
         exit(0);
     }
@@ -396,17 +414,7 @@ public class Game extends JFrame {
             }
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2d = (Graphics2D) g;
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            g2d.setColor(Color.BLACK);
-            g2d.fillRect(0, 0, getWidth(), getHeight());
-            g2d.drawImage(buffer, 0, 0, null);
-
-
+        private void updatePetSprite(Graphics2D g2d) {
             Map<String, Integer> colorMap = Map.of(
                     "White", 0,
                     "Gold", 1,
@@ -422,7 +430,6 @@ public class Game extends JFrame {
             }
 
             BufferedImage playerSprite;
-            System.out.println(pet.getState());
             switch (pet.getState()) {
                 case WALKING -> playerSprite = pet.getSprite(direction, currentFrame + colorIndex);
                 case IDLE -> playerSprite = pet.getSprite(4, currentFrame + colorIndex);
@@ -430,14 +437,56 @@ public class Game extends JFrame {
                 case DANCING -> playerSprite = pet.getSprite(currentFrame, colorIndex);
                 default -> playerSprite = pet.getSprite(direction, colorIndex);
             }
-            renderGameObjects(g2d);
-            g2d.drawImage(playerSprite, playerPos[0], playerPos[1], TILE_SIZE * 2, TILE_SIZE * 2, null);
 
+            g2d.drawImage(playerSprite, playerPos[0], playerPos[1], TILE_SIZE * 2, TILE_SIZE * 2, null);
+        }
+
+        private void updateEmotes(Graphics2D g2d) {
             Emote emote = pet.getEmote();
             if (emote != null) {
                 int[] emotePosition = getEmotePosition();
                 g2d.drawImage(emote.getImage(), emotePosition[0], emotePosition[1], 32, 32, null);
             }
+        }
+
+        private void drawBubbles(Graphics2D g2d) {
+            for (Bubble bubble : bubbles) {
+                g2d.setColor(new Color(225, 225, 255, bubble.getLifespan() * 255 / 10));
+                g2d.drawOval((int) (bubble.getPosition().x + (Math.random()*10+5)-15), (int) (bubble.getPosition().y + (Math.random()*10+5)-10), bubble.getRadius(), bubble.getRadius());
+            }
+        }
+
+        private void updateBubbles() {
+            Iterator<Bubble> iterator = bubbles.iterator();
+            while (iterator.hasNext()) {
+                Bubble bubble = iterator.next();
+                bubble.decreaseLifespan();
+                if (bubble.getLifespan() <= 0) {
+                    iterator.remove();
+                }
+            }
+        }
+
+        private Graphics2D setupG2D(Graphics g) {
+            super.paintComponent(g);
+
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(Color.BLACK);
+            g2d.fillRect(0, 0, getWidth(), getHeight());
+            g2d.drawImage(buffer, 0, 0, null);
+            return g2d;
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2d = setupG2D(g);
+
+            renderGameObjects(g2d);
+            updatePetSprite(g2d);
+            updateEmotes(g2d);
+            drawBubbles(g2d);
+            updateBubbles();
         }
     }
 }

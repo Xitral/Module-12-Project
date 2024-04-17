@@ -85,7 +85,12 @@ public class TitleScreen extends JFrame {
     }
 
     private void onPetSelect(Pet pet) {
-        this.gamePet = pet.getClass().getSimpleName().equals("Dog") ? new Dog("","") : new Cat("","");
+        String petName = JOptionPane.showInputDialog(this, "Name your " + pet.getClass().getSimpleName().toLowerCase() + ":");
+        if (petName == null || petName.trim().isEmpty()) {
+            return;
+        }
+
+        this.gamePet = pet.getClass().getSimpleName().equals("Dog") ? new Dog("", petName) : new Cat("", petName);
         String soundFile = pet.getClass().getSimpleName().equals("Dog") ? "resources/sounds/bark1.wav" : "resources/sounds/meow2.wav";
         new Sound(soundFile).play();
         createColorButtons(pet);
