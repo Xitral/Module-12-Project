@@ -1,2 +1,3 @@
-package PACKAGE_NAME;public enum PlayerState {
+public enum PlayerState {
+    IDLE, WALKING, SLEEPING, DEAD
 }
