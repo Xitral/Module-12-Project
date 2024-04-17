@@ -144,14 +144,14 @@ public class Game extends JFrame {
 
         this.addFurniture(
                 new WaterBowl(
-                        new Point(400, 450),
+                        new Point(0, 450),
                 itemMap.getTile(3,15,32),
                 true, "Water Bowl", "Water for your pet.")
         );
 
         this.addFurniture(
                 new FoodPlate(
-                        new Point(450, 450),
+                        new Point(50, 450),
                         itemMap.getTile(14,15,32),
                         true, "Food Plate", "Food for your pet.")
         );
@@ -482,8 +482,8 @@ public class Game extends JFrame {
         protected void paintComponent(Graphics g) {
             Graphics2D g2d = setupG2D(g);
 
-            renderGameObjects(g2d);
             updatePetSprite(g2d);
+            renderGameObjects(g2d);
             updateEmotes(g2d);
             drawBubbles(g2d);
             updateBubbles();

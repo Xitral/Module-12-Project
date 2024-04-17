@@ -1,7 +1,6 @@
 import java.awt.image.BufferedImage;
-import java.io.Serializable;
 
-public abstract class Pet implements Serializable {
+public abstract class Pet {
     private SpriteSheet spriteSheet;
     private BufferedImage[][] sprites;
     private final SpriteSheet emotes = new SpriteSheet("/resources/images/emotes.png", 16);
