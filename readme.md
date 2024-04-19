@@ -1,3 +1,4 @@
+# Untitled Pet Game
 This game is inspired by Pet Pals 2, a game I played as a child.
 It is a simple game where you can take care of a pet, play minigames, and explore the world.
 https://www.youtube.com/watch?v=VK1unG0kg-o
